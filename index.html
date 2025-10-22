@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>GitHub Repository Analyzer</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI GitHub Repository Analyzer & Re-implementer</title>
     <link rel="stylesheet" href="index.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="importmap">
       {
         "imports": {
@@ -17,12 +18,15 @@
   </head>
   <body>
     <main>
-      <h1>GitHub Repository Analyzer</h1>
-      <p>
-        Enter a GitHub repo URL. The AI will automatically identify key files,
-        fetch them, and provide a holistic code analysis.
-      </p>
-      <div class="form-container">
+      <header>
+        <h1>AI GitHub Repository Analyzer</h1>
+        <p>
+          Enter a public GitHub repo URL. The AI will identify key files,
+          provide a holistic code analysis, and optionally re-implement the
+          project with improvements.
+        </p>
+      </header>
+      <section class="form-container">
         <div class="form-group">
           <label for="repo-url">Repository URL</label>
           <input
@@ -38,13 +42,13 @@
           <input
             type="password"
             id="github-pat"
-            placeholder="Enter token to avoid rate limits"
+            placeholder="Enter token to avoid API rate limits"
             aria-label="GitHub Personal Access Token"
           />
           <p class="input-description">
-            Unauthenticated requests are limited to 60/hour. Provide a PAT to
-            increase the limit to 5,000/hour. The token is only used in your
-            browser and not stored.
+            GitHub limits unauthenticated requests to 60/hour. Provide a PAT
+            to increase the limit. The token is only used in your browser and is
+            not stored.
           </p>
         </div>
         <div class="form-group">
@@ -53,35 +57,37 @@
           >
           <textarea
             id="existing-analysis-input"
-            placeholder="If you already have an analysis of this repo, paste it here to use it for the re-implementation steps."
+            rows="5"
+            placeholder="If you already have an analysis of this repo, paste it here to use it for the re-implementation steps, skipping the analysis call."
             aria-label="Paste Existing Analysis"
           ></textarea>
         </div>
         <button id="analyze-repo-button">Analyze Repository</button>
-      </div>
+      </section>
+
       <div id="output-container" aria-live="polite"></div>
 
-      <!-- Section for the re-implementation prompt generator -->
-      <div id="prompt-generation-area" style="display: none">
+      <!-- Section for re-implementation -->
+      <section id="prompt-generation-area" style="display: none">
         <h2>Re-implement with Gemini</h2>
         <p class="subtle-text">
-          Generate a comprehensive prompt to have an AI assistant re-create this
-          project from scratch with all the suggested fixes and improvements, or
-          have Gemini do it directly and download the result.
+          Based on the analysis, you can have Gemini re-create this project
+          from scratch with all the suggested fixes and improvements, then
+          download the result as a ZIP file.
         </p>
         <div class="button-group">
-          <button id="generate-prompt-button">
-            Generate Re-implementation Prompt
-          </button>
           <button id="reimplement-zip-button">
             Re-implement & Download ZIP
           </button>
+          <button id="generate-prompt-button">
+            Generate Demo Prompt
+          </button>
         </div>
-        <div id="reimplementation-prompt-output"></div>
+        <div id="reimplementation-prompt-output" aria-live="polite"></div>
         <div id="reimplementation-output" aria-live="polite">
           <ul id="reimplementation-progress"></ul>
         </div>
-      </div>
+      </section>
     </main>
     <script type="module" src="index.tsx"></script>
   </body>
