@@ -367,112 +367,13 @@ function reimplementAndZip() {
   reimplementationProgress.innerHTML = '';
   reimplementationOutput.innerHTML = '';
 
-  const workerCode = `
-    // Using ES Module imports in the worker
-    const { default: JSZip } = await import('https://esm.sh/jszip@^3.10.1');
-    const { GoogleGenAI, HarmBlockThreshold, HarmCategory, Type } = await import('https://esm.sh/@google/genai@^0.14.0');
+  // Terminate any existing worker to prevent race conditions or memory leaks
+  if (state.reimplementationWorker) {
+    state.reimplementationWorker.terminate();
+  }
 
-    let ai;
-    const safetySettings = [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    ];
-
-    self.onmessage = async (event) => {
-        const { analysisContent, fileContents, apiKey, model, maxBatchChars } = event.data;
-        if (!ai) {
-            ai = new GoogleGenAI({ apiKey });
-        }
-
-        try {
-            const projectStructure = {
-                Configuration: { keywords: ['config', 'vite', 'package.json', 'tsconfig', '.env', 'setup'], files: [] },
-                Styling: { keywords: ['.css', '.scss', '.less', 'tailwind', 'styles'], files: [] },
-                CoreLogic: { keywords: ['api', 'service', 'util', 'lib', 'core', 'helper', 'logic', 'server', 'controller', 'model'], files: [] },
-                UI: { keywords: ['component', 'view', 'page', 'ui', 'layout', 'header', 'footer', '.html'], files: [] },
-                Miscellaneous: { keywords: [], files: [] },
-            };
-
-            fileContents.forEach(file => {
-                const assignedPart = Object.keys(projectStructure).find(partName =>
-                    projectStructure[partName].keywords.some(kw => file.path.toLowerCase().includes(kw))
-                ) || 'Miscellaneous';
-                projectStructure[assignedPart].files.push(file);
-            });
-
-            const allGeneratedFiles = {};
-
-            for (const partName of Object.keys(projectStructure)) {
-                const part = projectStructure[partName];
-                if (part.files.length === 0) continue;
-
-                const batches = [];
-                let currentBatch = [];
-                let currentCharCount = 0;
-                for (const file of part.files) {
-                    if (currentBatch.length > 0 && (currentCharCount + file.content.length > maxBatchChars)) {
-                        batches.push(currentBatch);
-                        currentBatch = [];
-                        currentCharCount = 0;
-                    }
-                    currentBatch.push(file);
-                    currentCharCount += file.content.length;
-                }
-                if (currentBatch.length > 0) batches.push(currentBatch);
-                
-                for (let i = 0; i < batches.length; i++) {
-                    const batchFiles = batches[i];
-                    const statusMsg = batches.length > 1
-                        ? \`Generating \${partName} (Batch \${i + 1}/\${batches.length})...\`
-                        : \`Generating \${partName} (\${part.files.length} files)...\`;
-                    self.postMessage({ type: 'progress', partName, statusMsg, isStarting: i === 0, fileCount: part.files.length });
-
-                    const reimplementationPrompt = \`
-                      Based on the provided analysis and source files, re-implement ONLY the following files...
-                      Analysis Context: ---\n\${analysisContent}\n---
-                      Files to re-implement: \${batchFiles.map(file => \`\n\n--- FILE: \${file.path} ---\n\\\`\\\`\\\`\n\${file.content}\n\\\`\\\`\\\`\`).join('')}
-                    \`;
-
-                    const result = await ai.models.generateContent({
-                        model: model,
-                        contents: [{role: 'user', parts: [{text: reimplementationPrompt}]}],
-                        config: {
-                            responseMimeType: 'application/json',
-                            responseSchema: {
-                                type: Type.OBJECT,
-                                properties: { files: { type: Type.OBJECT, description: "Keys are file paths, values are new file contents." } },
-                                required: ['files']
-                            },
-                            safetySettings,
-                        }
-                    });
-                    
-                    const generated = JSON.parse(result.text);
-                    if (generated && generated.files) {
-                        Object.assign(allGeneratedFiles, generated.files);
-                    } else {
-                        throw new Error(\`AI returned invalid JSON structure for \${partName}.\`);
-                    }
-                }
-                self.postMessage({ type: 'progress-success', partName, fileCount: part.files.length });
-            }
-
-            const zip = new JSZip();
-            for (const [filePath, content] of Object.entries(allGeneratedFiles)) {
-                zip.file(filePath, content);
-            }
-            const zipBlob = await zip.generateAsync({ type: 'blob' });
-            self.postMessage({ type: 'complete', blob: zipBlob });
-
-        } catch (error) {
-            self.postMessage({ type: 'error', message: error.message });
-        }
-    };
-  `;
-  const blob = new Blob([workerCode], {type: 'application/javascript'});
-  state.reimplementationWorker = new Worker(URL.createObjectURL(blob), {type: 'module'});
+  // Use Vite's special syntax to create a worker. Vite will handle bundling.
+  state.reimplementationWorker = new Worker(new URL('./reimplementation.worker.ts', import.meta.url), { type: 'module' });
   
   const progressItems: Record<string, HTMLLIElement> = {};
 
@@ -480,7 +381,7 @@ function reimplementAndZip() {
     const { type, partName, statusMsg, isStarting, fileCount, blob, message } = e.data;
     switch (type) {
       case 'progress':
-        if (isStarting) {
+        if (isStarting && !progressItems[partName]) {
           const li = document.createElement('li');
           reimplementationProgress.appendChild(li);
           progressItems[partName] = li;
@@ -497,17 +398,21 @@ function reimplementAndZip() {
         const a = document.createElement('a');
         a.href = downloadUrl;
         a.download = `reimplemented-${repoInfo.repo}.zip`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
         setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
         setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
         state.reimplementationWorker?.terminate();
+        state.reimplementationWorker = null;
         break;
       case 'error':
         showError(message, reimplementationOutput);
         setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
         setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
         state.reimplementationWorker?.terminate();
+        state.reimplementationWorker = null;
         break;
     }
   };
@@ -518,6 +423,7 @@ function reimplementAndZip() {
     setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
     setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
     state.reimplementationWorker?.terminate();
+    state.reimplementationWorker = null;
   };
 
   state.reimplementationWorker.postMessage({

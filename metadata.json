@@ -1,5 +1,5 @@
 {
-  "name": "cd git-Rep/Rip&Re-Imagined ",
-  "description": "Let Gemini execute Python code in a sandbox",
+  "name": "GitHub Repository Analyzer and Re-implementer",
+  "description": "An AI-powered tool to analyze a GitHub repository, suggest improvements, and re-implement the code from scratch.",
   "requestFramePermissions": []
 }
