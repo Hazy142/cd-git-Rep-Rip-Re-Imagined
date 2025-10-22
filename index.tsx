@@ -15,14 +15,14 @@ const config = {
   // NOTE: This key is exposed on the client side. This is a security risk.
   // This application is a Proof-of-Concept and should not be deployed publicly
   // without moving API calls to a secure backend.
-  apiKey: process.env.GEMINI_API_KEY,
-  model: 'gemini-1.5-pro-latest', // Using latest for better features like JSON mode
+  apiKey: process.env.API_KEY,
+  model: 'gemini-2.5-pro', // Using a powerful and recent model
   maxAnalysisChars: 250000, // Safety limit for analysis payload
   maxBatchChars: 50000, // Limit content size per reimplementation API call
 };
 
 if (!config.apiKey) {
-  throw new Error('GEMINI_API_KEY environment variable not set.');
+  throw new Error('API_KEY environment variable not set.');
 }
 
 // --- INITIALIZATION ---
@@ -222,12 +222,12 @@ async function analyzeRepository() {
 
       Respond with a JSON object containing a single key "files", which is an array of the selected file paths.
     `;
-    const genAI = ai.getGenerativeModel({ model: config.model, safetySettings });
-    const selectionResult = await genAI.generateContent({
+    const selectionResult = await ai.models.generateContent({
+      model: config.model,
       contents: [{ role: 'user', parts: [{ text: selectionPrompt }] }],
-      generationConfig: { responseMimeType: 'application/json' },
+      config: { responseMimeType: 'application/json', safetySettings },
     });
-    const selectedFiles = JSON.parse(selectionResult.response.text()).files as string[];
+    const selectedFiles = JSON.parse(selectionResult.text).files as string[];
     if (!selectedFiles || selectedFiles.length === 0) {
       throw new Error('AI could not select any files. The repository might be empty or unsupported.');
     }
@@ -250,24 +250,101 @@ async function analyzeRepository() {
       analysisContent = userAnalysis;
     } else {
       showStatus('AI is performing holistic analysis...');
-      const allFileContent = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
-      if (allFileContent.length > config.maxAnalysisChars) {
-          throw new Error(`Project is too large to analyze (${allFileContent.length} chars). Please try a smaller repository or provide an existing analysis.`);
-      }
-      const analysisPrompt = `
-        You are an expert code reviewer. Provide a holistic, high-level analysis of this project based on the following files.
-        1.  **Project Purpose and Architecture:** What does it do and how is it built?
-        2.  **Potential Flaws & Vulnerabilities:** Identify architectural weaknesses, common bugs, or security risks.
-        3.  **Suggestions for Improvement:** Recommend specific, actionable improvements for code quality, performance, and maintainability.
-        Format your response in clear, well-structured markdown.
+      const allFileContentString = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
+      const totalChars = allFileContentString.length;
 
-        Code:
-        ${allFileContent}
-      `;
-      const analysisResult = await genAI.generateContent(analysisPrompt);
-      analysisContent = analysisResult.response.text();
+      // If the project is too large, perform a batched "map-reduce" style analysis.
+      if (totalChars > config.maxAnalysisChars) {
+        showStatus(`Project is large (${totalChars} chars). Starting batched analysis...`);
+
+        // 1. Create batches of files
+        const batches: { path: string; content: string }[][] = [];
+        let currentBatch: { path: string; content: string }[] = [];
+        let currentCharCount = 0;
+        for (const file of fileContents) {
+          if (currentBatch.length > 0 && (currentCharCount + file.content.length > config.maxBatchChars)) {
+            batches.push(currentBatch);
+            currentBatch = [];
+            currentCharCount = 0;
+          }
+          currentBatch.push(file);
+          currentCharCount += file.content.length;
+        }
+        if (currentBatch.length > 0) batches.push(currentBatch);
+
+        // 2. "Map" step: Analyze each batch individually
+        const partialAnalyses: string[] = [];
+        for (let i = 0; i < batches.length; i++) {
+          const batchFiles = batches[i];
+          showStatus(`Analyzing file batch ${i + 1} of ${batches.length}...`);
+          const batchContent = batchFiles.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
+          const partialAnalysisPrompt = `
+              You are an expert code reviewer. Provide a concise analysis of the following code files.
+              Focus on the purpose of each file and how they might interact with other parts of a larger project.
+              Identify any potential issues or areas for improvement within this specific batch of files.
+              Do not provide a full project overview, as this is only a subset of the code.
+
+              Code:
+              ${batchContent}
+          `;
+          const partialResult = await ai.models.generateContent({
+            model: config.model,
+            contents: partialAnalysisPrompt,
+            config: { safetySettings },
+          });
+          partialAnalyses.push(partialResult.text);
+        }
+
+        // 3. "Reduce" step: Synthesize the partial analyses into one
+        showStatus('Synthesizing partial analyses into a final report...');
+        const finalAnalysisPrompt = `
+            You are an expert software architect. You have received several partial analyses of a single software project.
+            Your task is to synthesize these partial analyses into a single, cohesive, holistic, high-level review.
+            Do not just list the partial analyses. Combine their insights to form a complete picture of the project.
+
+            Your final output should cover:
+            1.  **Project Purpose and Architecture:** What does the project do and how is it structured?
+            2.  **Potential Flaws & Vulnerabilities:** Based on the combined partial analyses, what are the major architectural weaknesses, common bugs, or security risks?
+            3.  **Suggestions for Improvement:** Recommend specific, actionable improvements for the overall project regarding code quality, performance, and maintainability.
+            
+            Format your response in clear, well-structured markdown.
+
+            Partial Analyses:
+            ---
+            ${partialAnalyses.map((pa, i) => `PARTIAL ANALYSIS ${i + 1}:\n${pa}`).join('\n\n---\n\n')}
+            ---
+        `;
+        const finalResult = await ai.models.generateContent({
+          model: config.model,
+          contents: finalAnalysisPrompt,
+          config: { safetySettings },
+        });
+        analysisContent = finalResult.text;
+
+      } else {
+        // Original logic for smaller projects
+        const analysisPrompt = `
+          You are an expert code reviewer. Provide a holistic, high-level analysis of this project based on the following files.
+          1.  **Project Purpose and Architecture:** What does it do and how is it built?
+          2.  **Potential Flaws & Vulnerabilities:** Identify architectural weaknesses, common bugs, or security risks.
+          3.  **Suggestions for Improvement:** Recommend specific, actionable improvements for code quality, performance, and maintainability.
+          Format your response in clear, well-structured markdown.
+
+          Code:
+          ${allFileContentString}
+        `;
+        const analysisResult = await ai.models.generateContent({
+          model: config.model,
+          contents: analysisPrompt,
+          config: {
+            safetySettings,
+          },
+        });
+        analysisContent = analysisResult.text;
+      }
     }
     state.lastAnalysisContent = analysisContent;
+
 
     // Step 6: Display results
     renderAnalysisResult(analysisContent, fileContents);
@@ -296,8 +373,6 @@ async function reimplementAndZip() {
   setButtonState(generatePromptButton, 'Generate Demo Prompt', true);
   reimplementationProgress.innerHTML = '';
   reimplementationOutput.innerHTML = '';
-
-  const genAI = ai.getGenerativeModel({ model: config.model, safetySettings });
 
   try {
     const projectStructure = {
@@ -363,9 +438,10 @@ async function reimplementAndZip() {
         `;
 
         // Using robust JSON mode for the response
-        const result = await genAI.generateContent({
+        const result = await ai.models.generateContent({
+            model: config.model,
             contents: [{role: 'user', parts: [{text: reimplementationPrompt}]}],
-            generationConfig: {
+            config: {
                 responseMimeType: 'application/json',
                 responseSchema: {
                     type: Type.OBJECT,
@@ -376,11 +452,12 @@ async function reimplementAndZip() {
                         }
                     },
                     required: ['files']
-                }
+                },
+                safetySettings,
             }
         });
         
-        const generated = JSON.parse(result.response.text());
+        const generated = JSON.parse(result.text);
         if (generated && generated.files) {
           Object.assign(allGeneratedFiles, generated.files);
         } else {

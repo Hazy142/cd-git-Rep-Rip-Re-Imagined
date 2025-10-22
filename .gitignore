@@ -1,3 +1,16 @@
+# Dependency directories
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment variables
+# Do not commit .env files containing secrets.
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log
@@ -7,15 +20,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Vite local files
 *.local
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*

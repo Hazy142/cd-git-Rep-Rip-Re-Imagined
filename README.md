@@ -12,7 +12,7 @@ This project is an advanced, AI-powered tool for developers. It analyzes public 
 
 This application is a **proof-of-concept and is not secure for production use**.
 
-The current architecture embeds the `GEMINI_API_KEY` directly into the client-side JavaScript bundle. This means **anyone who visits the deployed web page can easily find and use your API key at your expense.**
+The current architecture requires the `API_KEY` to be available in the client-side JavaScript environment. This means **if you build it into the bundle, anyone who visits the deployed web page can easily find and use your API key at your expense.**
 
 For a production-ready version, all interactions with the Gemini API must be moved to a secure backend server that protects the API key.
 
@@ -42,7 +42,7 @@ For a production-ready version, all interactions with the Gemini API must be mov
 ## Technology Stack
 
 -   **Framework**: Vanilla TypeScript (No React, Vue, etc.)
--   **AI Model**: Google Gemini 1.5 Pro
+-   **AI Model**: Google Gemini 2.5 Pro
 -   **APIs**: GitHub API, Google AI JavaScript SDK
 -   **Build Tool**: Vite
 -   **Key Libraries**: `marked` (Markdown parsing), `JSZip` (ZIP creation), `DOMPurify` (HTML sanitization)
@@ -65,7 +65,7 @@ For a production-ready version, all interactions with the Gemini API must be mov
 3.  **Set up your environment variables:**
     Create a file named `.env` in the root of the project and add your Gemini API key:
     ```
-    GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+    API_KEY="YOUR_API_KEY"
     ```
 
 4.  **Run the development server:**
