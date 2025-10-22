@@ -379,3 +379,159 @@ button .spinner {
     width: 100%;
   }
 }
+
+/* API Key Floating Panel */
+.api-key-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+}
+
+#api-key-toggle-button {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    cursor: pointer;
+    position: relative;
+}
+
+#api-key-toggle-button .icon {
+    font-size: 24px;
+}
+
+#api-key-toggle-button .badge {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    background-color: var(--color-error-text);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid var(--color-surface);
+}
+
+.api-key-panel {
+    position: absolute;
+    top: 60px;
+    right: 0;
+    width: 320px;
+    background-color: var(--color-surface);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--box-shadow-md);
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    transform-origin: top right;
+    transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+    opacity: 1;
+    transform: scale(1);
+}
+
+.api-key-container.collapsed .api-key-panel {
+    opacity: 0;
+    transform: scale(0.95);
+    pointer-events: none;
+}
+
+.api-key-panel h3 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.api-key-panel p {
+    font-size: 0.9em;
+    color: var(--color-text-secondary);
+    text-align: left;
+    margin: 0;
+}
+
+.api-key-panel .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.api-key-panel .button-group {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-sm);
+}
+.api-key-panel button.secondary {
+    background-color: var(--color-disabled-bg);
+    color: var(--color-text-secondary);
+}
+.api-key-panel button.secondary:hover {
+    background-color: #dcdfe3;
+}
+.api-key-panel small {
+    text-align: center;
+    font-size: 0.8em;
+}
+#api-key-status {
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    text-align: center;
+    display: none;
+}
+#api-key-status.success { background-color: var(--color-success-bg); color: var(--color-success-text); }
+#api-key-status.error { background-color: var(--color-error-bg); color: var(--color-error-text); }
+#api-key-status.warning { background-color: var(--color-warning-bg); color: var(--color-warning-text); }
+
+/* Status Messages */
+.status-message {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--border-radius-lg);
+  margin: var(--spacing-lg) 0;
+  border: 1px solid;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+/* Error State */
+.status-message.error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-text);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.status-message.error::before {
+  content: "❌ ";
+}
+
+/* Success State */
+.status-message.success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-color: var(--color-success-text);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.status-message.success::before {
+  content: "✅ ";
+}
+
+/* Hidden State */
+.status-message.hidden {
+  opacity: 0;
+  pointer-events: none;
+}

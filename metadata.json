@@ -1,5 +1,13 @@
 {
-  "name": "GitHub Repository Analyzer and Re-implementer",
-  "description": "An AI-powered tool to analyze a GitHub repository, suggest improvements, and re-implement the code from scratch.",
-  "requestFramePermissions": []
+  "name": "GitHub Repository Analyzer & Re-implementer",
+  "description": "AI-powered tool to analyze and re-implement GitHub repositories using Gemini",
+  "version": "2.0.0",
+  "author": "Jules & André",
+  "requestFramePermissions": [],
+  "tags": ["ai", "github", "code-analysis", "gemini", "repository-tools"],
+  "icon": "🔍",
+  "gemini": {
+    "model": "gemini-2.0-flash-exp",
+    "features": ["code-analysis", "file-processing", "batch-generation"]
+  }
 }

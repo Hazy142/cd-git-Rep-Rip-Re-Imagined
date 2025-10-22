@@ -7,7 +7,7 @@ import { state } from '../state';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-export async function analyzeRepository(repoPath: string, pat: string, existingAnalysis: string, model: string) {
+export async function analyzeRepository(repoPath: string, pat: string, existingAnalysis: string) {
     try {
         const headers: HeadersInit = pat ? { 'Authorization': `Bearer ${pat}` } : {};
 
@@ -20,29 +20,24 @@ export async function analyzeRepository(repoPath: string, pat: string, existingA
 
         // Step 3: Use AI to select important files
         showStatus('AI is selecting important files...');
-        const selectionPrompt = `
-      You are a senior software architect. Analyze the provided README and file list to select up to 100 of the most important source files for a code review.
-      Focus on core application logic, configuration, and essential UI components.
-      Exclude lock files (package-lock.json, yarn.lock), build outputs, assets (images, fonts), and extensive documentation.
+        const contextForFileSelection = `
+          You are a senior software architect. Analyze the provided README and file list to select up to 100 of the most important source files for a code review.
+          Focus on core application logic, configuration, and essential UI components.
+          Exclude lock files (package-lock.json, yarn.lock), build outputs, assets (images, fonts), and extensive documentation.
+          Respond with a JSON object containing a single key "files", which is an array of the selected file paths.
+        `;
+        const repoDataForFileSelection = `
+          README (first 2000 chars):
+          """
+          ${readmeContent.substring(0, 2000)}
+          """
 
-      README (first 2000 chars):
-      """
-      ${readmeContent.substring(0, 2000)}
-      """
+          File list:
+          ${JSON.stringify(fileList)}
+        `;
 
-      File list:
-      ${JSON.stringify(fileList)}
-
-      Respond with a JSON object containing a single key "files", which is an array of the selected file paths.
-    `;
-        let selectedFiles: string[] = [];
-        await analyzeCode(selectionPrompt, model, { responseMimeType: 'application/json' }, fileList.length, (chunk) => {
-            if (chunk.text) {
-                try {
-                    selectedFiles = JSON.parse(chunk.text).files;
-                } catch(e) {}
-            }
-        });
+        const selectionResult = await analyzeCode(repoDataForFileSelection, contextForFileSelection);
+        const selectedFiles = JSON.parse(selectionResult).files;
 
         if (!selectedFiles || selectedFiles.length === 0) {
             throw new Error('AI could not select any files. The repository might be empty or unsupported.');
@@ -81,7 +76,7 @@ export async function analyzeRepository(repoPath: string, pat: string, existingA
         } else {
             showStatus('AI is performing holistic analysis...');
             const allFileContentString = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
-            const analysisPrompt = `
+            const contextForAnalysis = `
             You are an expert code reviewer and senior software architect. Perform a holistic, high-level code review of the following project files.
 
             Your goal is to provide a comprehensive assessment that would be useful to a new developer joining the team or for a technical lead planning the next phase of development.
@@ -92,6 +87,8 @@ export async function analyzeRepository(repoPath: string, pat: string, existingA
             3.  **Suggestions for Improvement:** Provide actionable recommendations to address the identified flaws. Prioritize the most critical changes.
 
             Analyze the following code:
+          `;
+            const repoDataForAnalysis = `
             ---
             ${allFileContentString}
             ---
@@ -102,14 +99,9 @@ export async function analyzeRepository(repoPath: string, pat: string, existingA
                 <div class="analysis-content"></div>
             `;
             const analysisContentDiv = outputContainer.querySelector('.analysis-content') as HTMLDivElement;
-            let analysisContent = '';
 
-            await analyzeCode(analysisPrompt, model, {}, fileContents.length, async (chunk) => {
-                if (chunk.text) {
-                    analysisContent += chunk.text;
-                    analysisContentDiv.innerHTML = DOMPurify.sanitize(await marked.parse(analysisContent));
-                }
-            });
+            const analysisContent = await analyzeCode(repoDataForAnalysis, contextForAnalysis);
+            analysisContentDiv.innerHTML = DOMPurify.sanitize(await marked.parse(analysisContent));
             state.lastAnalysisContent = analysisContent;
             outputContainer.insertAdjacentHTML('beforeend', renderFileExplorer(fileContents));
         }
