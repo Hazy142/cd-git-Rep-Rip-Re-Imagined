@@ -1,72 +1,159 @@
+/* ==========================================================================
+   1. Root Variables
+   ========================================================================== */
+
+:root {
+  /* Colors */
+  --color-primary: #1877f2;
+  --color-primary-hover: #166fe5;
+  --color-background: #f0f2f5;
+  --color-surface: #ffffff;
+  --color-text-primary: #1c1e21;
+  --color-text-secondary: #606770;
+  --color-text-subtle: #8a8d91;
+  --color-border: #dddfe2;
+  --color-disabled-bg: #e4e6eb;
+  --color-disabled-text: #bcc0c4;
+  --color-focus-ring: #e7f3ff;
+
+  /* Status Colors */
+  --color-success-bg: #d4edda;
+  --color-success-text: #155724;
+  --color-error-bg: #f8d7da;
+  --color-error-text: #721c24;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+  --color-info-bg: #f0f2f5;
+  --color-info-text: #606770;
+
+  /* Typography */
+  --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol';
+  --font-family-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo,
+    Courier, monospace;
+  --font-size-base: 16px;
+  --line-height-base: 1.5;
+
+  /* Spacing & Sizing */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem; /* 8px */
+  --spacing-md: 1rem; /* 16px */
+  --spacing-lg: 1.5rem; /* 24px */
+  --spacing-xl: 2rem; /* 32px */
+
+  /* Borders & Shadows */
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  --box-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   2. Global Styles & Resets
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
-  font-family: sans-serif;
-  background-color: #f0f2f5;
-  color: #1c1e21;
+  font-family: var(--font-family-sans);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
   margin: 0;
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* Align to top for longer content */
+  align-items: flex-start;
   min-height: 100vh;
-  padding: 2em; /* More padding */
-  box-sizing: border-box;
+  padding: var(--spacing-xl);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
 }
+
+/* ==========================================================================
+   3. Layout
+   ========================================================================== */
 
 main {
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.1);
-  padding: 2em;
+  background-color: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--box-shadow-md);
+  padding: var(--spacing-xl);
   width: 100%;
-  max-width: 800px; /* Wider for code */
-  box-sizing: border-box;
-}
-
-h1 {
-  font-size: 1.5em;
-  margin-top: 0;
-  text-align: center;
-}
-
-p {
-  text-align: center;
-  color: #606770;
-  margin-bottom: 2em;
+  max-width: 800px;
 }
 
 .form-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5em;
+  gap: var(--spacing-lg);
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5em;
+  gap: var(--spacing-sm);
+}
+
+.button-group {
+  display: flex;
+  gap: var(--spacing-md);
+  justify-content: flex-end; /* Align buttons to the right */
+}
+
+/* ==========================================================================
+   4. Typography
+   ========================================================================== */
+
+h1 {
+  font-size: 1.75em;
+  margin: 0 0 var(--spacing-sm) 0;
+  text-align: center;
+}
+
+h2 {
+  color: var(--color-primary);
+  margin-top: 0;
+}
+
+p {
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin: 0 0 var(--spacing-xl) 0;
+}
+
+.subtle-text,
+.input-description {
+  font-size: 0.875em;
+  color: var(--color-text-subtle);
+  margin: 0;
+  text-align: left;
 }
 
 label {
-  font-weight: bold;
-  color: #606770;
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
+
+/* ==========================================================================
+   5. Form Elements
+   ========================================================================== */
 
 input[type='url'],
 input[type='password'],
 textarea {
   width: 100%;
   padding: 0.75em;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
   font-size: 1em;
-  box-sizing: border-box;
-  font-family: sans-serif;
-}
-
-.input-description {
-  font-size: 0.8em;
-  color: #8a8d91;
-  margin: 0.25em 0 0 0;
-  text-align: left;
+  font-family: var(--font-family-sans);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 textarea {
@@ -74,117 +161,172 @@ textarea {
   resize: vertical;
 }
 
-input[type='url']:focus,
-input[type='password']:focus,
-textarea:focus {
+input[type='url']:focus-visible,
+input[type='password']:focus-visible,
+textarea:focus-visible {
   outline: none;
-  border-color: #1877f2;
-  box-shadow: 0 0 0 2px #e7f3ff;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
 }
+
+/* ==========================================================================
+   6. Buttons
+   ========================================================================== */
 
 button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5em;
+  gap: var(--spacing-sm);
   padding: 0.75em 1.5em;
   border: none;
-  border-radius: 6px;
-  background-color: #1877f2;
+  border-radius: var(--border-radius-md);
+  background-color: var(--color-primary);
   color: white;
   font-size: 1em;
   font-weight: bold;
   cursor: pointer;
   transition: background-color 0.2s;
-  flex-grow: 1; /* Allow buttons to grow */
+  line-height: 1; /* Fix line height issues */
 }
 
 button:hover {
-  background-color: #166fe5;
+  background-color: var(--color-primary-hover);
 }
 
 button:disabled {
-  background-color: #a0a0a0;
+  background-color: var(--color-disabled-bg);
+  color: var(--color-disabled-text);
   cursor: not-allowed;
 }
 
-#analyze-repo-button {
-  align-self: flex-end; /* Align button to the right */
-  flex-grow: 0; /* Prevent this button from growing */
+.copy-button {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: #e4e6eb;
+  color: #1c1e21;
+  border: 1px solid var(--color-border);
+  font-size: 0.8em;
 }
+
+.copy-button:hover {
+  background-color: #dcdfe3;
+}
+
+/* ==========================================================================
+   7. Output & Status Elements
+   ========================================================================== */
 
 #output-container,
 #prompt-generation-area {
-  margin-top: 2em;
-  border-top: 1px solid #dddfe2;
-  padding-top: 1.5em;
+  margin-top: var(--spacing-xl);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-lg);
 }
 
-#output-container h2,
-#prompt-generation-area h2 {
-  margin-top: 0;
-  color: #1877f2;
-}
-
-.subtle-text {
-  text-align: left;
-  font-size: 0.9em;
-  margin-bottom: 1.5em;
+#reimplementation-prompt-output,
+#reimplementation-output {
+  margin-top: var(--spacing-lg);
+  position: relative;
 }
 
 .status-message {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1em;
-  margin: 2em 0;
+  gap: var(--spacing-md);
+  margin: var(--spacing-xl) 0;
   font-weight: bold;
-  color: #606770;
+  color: var(--color-text-secondary);
+}
+
+pre,
+code {
+  font-family: var(--font-family-mono);
+  font-size: 0.9em;
 }
 
 pre {
-  border: 1px solid light-dark(#dddfe2, #444);
-  background-color: light-dark(#f7f7f7, #2d2d2d);
-  color: light-dark(#1c1e21, #e4e6eb);
-  padding: 1em;
+  background-color: #f7f7f7;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: var(--spacing-md);
   overflow: auto;
-  border-radius: 8px;
-  font-family: 'Courier New', Courier, monospace;
-  max-height: 400px; /* Limit code block height */
-}
-
-code {
-  font-family: 'Courier New', Courier, monospace;
+  border-radius: var(--border-radius-lg);
+  max-height: 400px;
 }
 
 details {
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  margin-bottom: 0.5em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  margin-bottom: var(--spacing-sm);
+  background-color: #f7f7f9;
 }
 
 summary {
   font-weight: bold;
   padding: 0.75em;
   cursor: pointer;
-  background-color: #f7f7f9;
 }
 
-details[open] summary {
-  border-bottom: 1px solid #dddfe2;
+details[open] > summary {
+  border-bottom: 1px solid var(--color-border);
 }
 
-/* Spinner for loading state */
+details > *:not(summary) {
+  padding: var(--spacing-md);
+  background-color: var(--color-surface);
+}
+
+/* Re-implementation progress list */
+#reimplementation-progress {
+  list-style-type: none;
+  padding: 0;
+  margin-top: var(--spacing-md);
+}
+
+#reimplementation-progress li {
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+  border-radius: var(--border-radius-sm);
+  font-weight: 500;
+}
+
+#reimplementation-progress li.in-progress {
+  color: var(--color-info-text);
+  background-color: var(--color-info-bg);
+}
+
+#reimplementation-progress li.success {
+  color: var(--color-success-text);
+  background-color: var(--color-success-bg);
+}
+
+#reimplementation-progress li.error {
+  color: var(--color-error-text);
+  background-color: var(--color-error-bg);
+}
+
+#reimplementation-progress li.warning {
+  color: var(--color-warning-text);
+  background-color: var(--color-warning-bg);
+}
+
+/* ==========================================================================
+   8. Components (Spinner, etc.)
+   ========================================================================== */
+
 .spinner {
+  animation: spin 1s linear infinite;
   border: 4px solid rgba(0, 0, 0, 0.1);
+  border-left-color: var(--color-primary);
+  border-radius: 50%;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
-  border-left-color: #1877f2;
-  animation: spin 1s ease infinite;
 }
 
-/* Smaller spinner for buttons */
 button .spinner {
   width: 16px;
   height: 16px;
@@ -193,85 +335,29 @@ button .spinner {
 }
 
 @keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
+  to {
     transform: rotate(360deg);
   }
 }
 
-/* Prompt output styles */
-#reimplementation-prompt-output,
-#reimplementation-output {
-  margin-top: 1.5em;
-  position: relative;
-}
+/* ==========================================================================
+   9. Media Queries
+   ========================================================================== */
 
-#reimplementation-prompt-output textarea {
-  width: 100%;
-  min-height: 400px;
-  padding: 1em;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 0.9em;
-  box-sizing: border-box;
-  resize: vertical;
-  background-color: #f7f7f7;
-}
+@media (max-width: 600px) {
+  body {
+    padding: var(--spacing-md);
+  }
 
-.copy-button {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 0.5em 1em;
-  background-color: #e4e6eb;
-  color: #1c1e21;
-  border: 1px solid #dddfe2;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-}
+  main {
+    padding: var(--spacing-lg);
+  }
 
-.copy-button:hover {
-  background-color: #dcdfe3;
-}
+  .button-group {
+    flex-direction: column;
+  }
 
-.button-group {
-  display: flex;
-  gap: 1em;
-}
-
-#reimplementation-progress {
-  list-style-type: none;
-  padding: 0;
-  margin-top: 1em;
-}
-
-#reimplementation-progress li {
-  padding: 0.5em;
-  margin-bottom: 0.5em;
-  border-radius: 4px;
-  font-weight: bold;
-}
-
-#reimplementation-progress li.in-progress {
-  color: #606770;
-  background-color: #f0f2f5;
-}
-
-#reimplementation-progress li.success {
-  color: #155724;
-  background-color: #d4edda;
-}
-
-#reimplementation-progress li.error {
-  color: #721c24;
-  background-color: #f8d7da;
-}
-
-#reimplementation-progress li.warning {
-  color: #856404;
-  background-color: #fff3cd;
+  button {
+    width: 100%;
+  }
 }
