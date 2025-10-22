@@ -1,3 +1,4 @@
+
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -5,9 +6,8 @@
  */
 
 // --- IMPORTS ---
-import { GoogleGenAI, HarmBlockThreshold, HarmCategory, Type } from '@google/genai';
+import { GoogleGenAI, HarmBlockThreshold, HarmCategory } from '@google/genai';
 import { marked } from 'marked';
-import JSZip from 'jszip';
 import DOMPurify from 'dompurify';
 
 // --- CONFIGURATION ---
@@ -50,6 +50,7 @@ const safetySettings = [
 const state = {
   lastAnalysisContent: '',
   lastFileContents: [] as { path: string; content: string }[],
+  reimplementationWorker: null as Worker | null,
 };
 
 // --- DOM ELEMENTS ---
@@ -104,29 +105,21 @@ function showError(message: string, container: HTMLElement = outputContainer) {
   }
 }
 
-function renderAnalysisResult(
-  analysisContent: string,
-  fileContents: { path: string; content: string }[]
-) {
-  const fileExplorerHtml = fileContents
-    .map(file => `
-      <details>
-        <summary>${escapeHtml(file.path)}</summary>
-        <pre><code>${escapeHtml(file.content)}</code></pre>
-      </details>
-    `).join('');
-
-  const unsafeHtml = marked.parse(analysisContent);
-  const safeHtml = DOMPurify.sanitize(unsafeHtml as string);
-
-  outputContainer.innerHTML = `
-      <h2>Analysis Result</h2>
-      <div class="analysis-content">${safeHtml}</div>
+function renderFileExplorer(fileContents: { path: string; content: string }[]): string {
+    return `
       <h2>Analyzed Files (${fileContents.length})</h2>
-      <div class="file-explorer">${fileExplorerHtml}</div>
-  `;
-  promptGenerationArea.style.display = 'block';
+      <div class="file-explorer">
+      ${fileContents
+        .map(file => `
+          <details>
+            <summary>${escapeHtml(file.path)}</summary>
+            <pre><code>${escapeHtml(file.content)}</code></pre>
+          </details>
+        `).join('')}
+      </div>
+    `;
 }
+
 
 // --- GITHUB API FUNCTIONS ---
 function parseRepoUrl(url: string): { owner: string; repo: string } | null {
@@ -243,21 +236,24 @@ async function analyzeRepository() {
     state.lastFileContents = fileContents;
 
     // Step 5: Perform analysis
-    let analysisContent: string;
     const userAnalysis = existingAnalysisInput.value.trim();
     if (userAnalysis) {
       showStatus('Using provided analysis...');
-      analysisContent = userAnalysis;
+      state.lastAnalysisContent = userAnalysis;
+      const parsedAnalysis = await marked.parse(userAnalysis);
+      outputContainer.innerHTML = `
+          <h2>Analysis Result</h2>
+          <div class="analysis-content">${DOMPurify.sanitize(parsedAnalysis)}</div>
+          ${renderFileExplorer(fileContents)}
+        `;
     } else {
       showStatus('AI is performing holistic analysis...');
       const allFileContentString = fileContents.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
       const totalChars = allFileContentString.length;
 
-      // If the project is too large, perform a batched "map-reduce" style analysis.
+      let analysisPromise;
       if (totalChars > config.maxAnalysisChars) {
         showStatus(`Project is large (${totalChars} chars). Starting batched analysis...`);
-
-        // 1. Create batches of files
         const batches: { path: string; content: string }[][] = [];
         let currentBatch: { path: string; content: string }[] = [];
         let currentCharCount = 0;
@@ -272,82 +268,80 @@ async function analyzeRepository() {
         }
         if (currentBatch.length > 0) batches.push(currentBatch);
 
-        // 2. "Map" step: Analyze each batch individually
         const partialAnalyses: string[] = [];
         for (let i = 0; i < batches.length; i++) {
           const batchFiles = batches[i];
           showStatus(`Analyzing file batch ${i + 1} of ${batches.length}...`);
           const batchContent = batchFiles.map(f => `--- FILE: ${f.path} ---\n${f.content}`).join('\n\n');
           const partialAnalysisPrompt = `
-              You are an expert code reviewer. Provide a concise analysis of the following code files.
-              Focus on the purpose of each file and how they might interact with other parts of a larger project.
-              Identify any potential issues or areas for improvement within this specific batch of files.
-              Do not provide a full project overview, as this is only a subset of the code.
+              You are an expert code reviewer. You are analyzing one part of a larger project.
+              Provide a concise summary and analysis for ONLY the files provided below.
+              Focus on the purpose of these specific files and identify any potential issues or areas for improvement within them.
+              Do NOT provide a full project overview, as you only have a partial view.
 
-              Code:
+              Analyze the following code files:
+              ---
               ${batchContent}
-          `;
-          const partialResult = await ai.models.generateContent({
-            model: config.model,
-            contents: partialAnalysisPrompt,
-            config: { safetySettings },
-          });
+              ---
+            `;
+          const partialResult = await ai.models.generateContent({ model: config.model, contents: [{ role: 'user', parts: [{ text: partialAnalysisPrompt }] }], config: { safetySettings } });
           partialAnalyses.push(partialResult.text);
         }
 
-        // 3. "Reduce" step: Synthesize the partial analyses into one
         showStatus('Synthesizing partial analyses into a final report...');
         const finalAnalysisPrompt = `
-            You are an expert software architect. You have received several partial analyses of a single software project.
-            Your task is to synthesize these partial analyses into a single, cohesive, holistic, high-level review.
-            Do not just list the partial analyses. Combine their insights to form a complete picture of the project.
+            You are an expert software architect. You have been provided with several partial code analyses from different parts of a single software project.
+            Your task is to synthesize these partial reviews into a single, cohesive, high-level code review of the entire project.
 
-            Your final output should cover:
-            1.  **Project Purpose and Architecture:** What does the project do and how is it structured?
-            2.  **Potential Flaws & Vulnerabilities:** Based on the combined partial analyses, what are the major architectural weaknesses, common bugs, or security risks?
-            3.  **Suggestions for Improvement:** Recommend specific, actionable improvements for the overall project regarding code quality, performance, and maintainability.
-            
-            Format your response in clear, well-structured markdown.
+            Identify the overarching themes and combine the individual points into a holistic assessment. Do not simply list the partial analyses.
 
-            Partial Analyses:
+            Structure your final review into the following sections using Markdown headings:
+            1.  **Project Purpose and Architecture:** Describe what the application does and how it's structured based on all the provided context.
+            2.  **Potential Flaws & Vulnerabilities:** Synthesize the key risks, weaknesses, and potential bugs from the partial analyses.
+            3.  **Suggestions for Improvement:** Provide a prioritized, actionable list of recommendations for the whole project.
+
+            Synthesize the following partial analyses:
             ---
-            ${partialAnalyses.map((pa, i) => `PARTIAL ANALYSIS ${i + 1}:\n${pa}`).join('\n\n---\n\n')}
+            ${partialAnalyses.map((p, i) => `### Partial Analysis ${i + 1}\n${p}`).join('\n\n---\n\n')}
             ---
-        `;
-        const finalResult = await ai.models.generateContent({
-          model: config.model,
-          contents: finalAnalysisPrompt,
-          config: { safetySettings },
-        });
-        analysisContent = finalResult.text;
-
+          `;
+        analysisPromise = ai.models.generateContentStream({ model: config.model, contents: [{ role: 'user', parts: [{ text: finalAnalysisPrompt }] }], config: { safetySettings } });
       } else {
-        // Original logic for smaller projects
         const analysisPrompt = `
-          You are an expert code reviewer. Provide a holistic, high-level analysis of this project based on the following files.
-          1.  **Project Purpose and Architecture:** What does it do and how is it built?
-          2.  **Potential Flaws & Vulnerabilities:** Identify architectural weaknesses, common bugs, or security risks.
-          3.  **Suggestions for Improvement:** Recommend specific, actionable improvements for code quality, performance, and maintainability.
-          Format your response in clear, well-structured markdown.
+            You are an expert code reviewer and senior software architect. Perform a holistic, high-level code review of the following project files.
 
-          Code:
-          ${allFileContentString}
-        `;
-        const analysisResult = await ai.models.generateContent({
-          model: config.model,
-          contents: analysisPrompt,
-          config: {
-            safetySettings,
-          },
-        });
-        analysisContent = analysisResult.text;
+            Your goal is to provide a comprehensive assessment that would be useful to a new developer joining the team or for a technical lead planning the next phase of development.
+
+            Structure your review into the following sections using Markdown headings:
+            1.  **Project Purpose and Architecture:** Briefly describe what the application does and how it's structured (e.g., client-side only, SPA, build system, key libraries).
+            2.  **Potential Flaws & Vulnerabilities:** Identify any security risks, architectural weaknesses, potential bugs, or reliability issues. Be specific.
+            3.  **Suggestions for Improvement:** Provide actionable recommendations to address the identified flaws. Prioritize the most critical changes.
+
+            Analyze the following code:
+            ---
+            ${allFileContentString}
+            ---
+          `;
+        analysisPromise = ai.models.generateContentStream({ model: config.model, contents: [{ role: 'user', parts: [{ text: analysisPrompt }] }], config: { safetySettings } });
       }
+      
+      outputContainer.innerHTML = `
+        <h2>Analysis Result</h2>
+        <div class="analysis-content"></div>
+      `;
+      const analysisContentDiv = outputContainer.querySelector('.analysis-content') as HTMLDivElement;
+      
+      let analysisContent = '';
+      for await (const chunk of await analysisPromise) {
+        analysisContent += chunk.text;
+        analysisContentDiv.innerHTML = DOMPurify.sanitize(await marked.parse(analysisContent));
+      }
+      state.lastAnalysisContent = analysisContent;
+      outputContainer.insertAdjacentHTML('beforeend', renderFileExplorer(fileContents));
     }
-    state.lastAnalysisContent = analysisContent;
+    
+    promptGenerationArea.style.display = 'block';
 
-
-    // Step 6: Display results
-    renderAnalysisResult(analysisContent, fileContents);
   } catch (error) {
     console.error('Error analyzing repository:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
@@ -357,12 +351,11 @@ async function analyzeRepository() {
   }
 }
 
-async function reimplementAndZip() {
+function reimplementAndZip() {
   if (!state.lastAnalysisContent || state.lastFileContents.length === 0) {
     showError('No analysis data available. Please analyze a repository first.', reimplementationOutput);
     return;
   }
-
   const repoInfo = parseRepoUrl(repoUrlInput.value);
   if (!repoInfo) {
     showError('Could not parse repository URL for naming the zip file.', reimplementationOutput);
@@ -374,161 +367,180 @@ async function reimplementAndZip() {
   reimplementationProgress.innerHTML = '';
   reimplementationOutput.innerHTML = '';
 
-  try {
-    const projectStructure = {
-      Configuration: { keywords: ['config', 'vite', 'package.json', 'tsconfig', '.env', 'setup'], files: [] as { path: string; content: string }[] },
-      Styling: { keywords: ['.css', '.scss', '.less', 'tailwind', 'styles'], files: [] as { path: string; content: string }[] },
-      CoreLogic: { keywords: ['api', 'service', 'util', 'lib', 'core', 'helper', 'logic', 'server', 'controller', 'model'], files: [] as { path: string; content: string }[] },
-      UI: { keywords: ['component', 'view', 'page', 'ui', 'layout', 'header', 'footer', '.html'], files: [] as { path: string; content: string }[] },
-      Miscellaneous: { keywords: [], files: [] as { path: string; content: string }[] },
-    };
-    type PartName = keyof typeof projectStructure;
+  const workerCode = `
+    // Using ES Module imports in the worker
+    const { default: JSZip } = await import('https://esm.sh/jszip@^3.10.1');
+    const { GoogleGenAI, HarmBlockThreshold, HarmCategory, Type } = await import('https://esm.sh/@google/genai@^0.14.0');
 
-    // Categorize files
-    state.lastFileContents.forEach(file => {
-      const assignedPart = (Object.keys(projectStructure) as PartName[]).find(partName =>
-        projectStructure[partName].keywords.some(kw => file.path.toLowerCase().includes(kw))
-      ) || 'Miscellaneous';
-      projectStructure[assignedPart].files.push(file);
-    });
+    let ai;
+    const safetySettings = [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    ];
 
-    const allGeneratedFiles: Record<string, string> = {};
-
-    for (const partName of Object.keys(projectStructure) as PartName[]) {
-      const part = projectStructure[partName];
-      if (part.files.length === 0) continue;
-
-      // Batch files within the category based on character count
-      const batches: { path: string; content: string }[][] = [];
-      let currentBatch: { path: string; content: string }[] = [];
-      let currentCharCount = 0;
-      for (const file of part.files) {
-        if (currentBatch.length > 0 && (currentCharCount + file.content.length > config.maxBatchChars)) {
-          batches.push(currentBatch);
-          currentBatch = [];
-          currentCharCount = 0;
+    self.onmessage = async (event) => {
+        const { analysisContent, fileContents, apiKey, model, maxBatchChars } = event.data;
+        if (!ai) {
+            ai = new GoogleGenAI({ apiKey });
         }
-        currentBatch.push(file);
-        currentCharCount += file.content.length;
-      }
-      if (currentBatch.length > 0) batches.push(currentBatch);
 
-      const progressItem = document.createElement('li');
-      reimplementationProgress.appendChild(progressItem);
-      
-      for (let i = 0; i < batches.length; i++) {
-        const batchFiles = batches[i];
-        const statusMsg = batches.length > 1
-            ? `⏳ Generating ${partName} (Batch ${i + 1}/${batches.length})...`
-            : `⏳ Generating ${partName} (${part.files.length} files)...`;
-        progressItem.textContent = statusMsg;
-        progressItem.className = 'in-progress';
+        try {
+            const projectStructure = {
+                Configuration: { keywords: ['config', 'vite', 'package.json', 'tsconfig', '.env', 'setup'], files: [] },
+                Styling: { keywords: ['.css', '.scss', '.less', 'tailwind', 'styles'], files: [] },
+                CoreLogic: { keywords: ['api', 'service', 'util', 'lib', 'core', 'helper', 'logic', 'server', 'controller', 'model'], files: [] },
+                UI: { keywords: ['component', 'view', 'page', 'ui', 'layout', 'header', 'footer', '.html'], files: [] },
+                Miscellaneous: { keywords: [], files: [] },
+            };
 
-        const reimplementationPrompt = `
-          Based on the provided analysis and source files, re-implement ONLY the following files.
-          Provide the full, improved code for each file. Adhere to best practices.
+            fileContents.forEach(file => {
+                const assignedPart = Object.keys(projectStructure).find(partName =>
+                    projectStructure[partName].keywords.some(kw => file.path.toLowerCase().includes(kw))
+                ) || 'Miscellaneous';
+                projectStructure[assignedPart].files.push(file);
+            });
 
-          Analysis Context:
-          ---
-          ${state.lastAnalysisContent}
-          ---
+            const allGeneratedFiles = {};
 
-          Files to re-implement in this batch:
-          ${batchFiles.map(file => `\n\n--- FILE: ${file.path} ---\n\`\`\`\n${file.content}\n\`\`\``).join('')}
-        `;
+            for (const partName of Object.keys(projectStructure)) {
+                const part = projectStructure[partName];
+                if (part.files.length === 0) continue;
 
-        // Using robust JSON mode for the response
-        const result = await ai.models.generateContent({
-            model: config.model,
-            contents: [{role: 'user', parts: [{text: reimplementationPrompt}]}],
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        files: {
-                            type: Type.OBJECT,
-                            description: "An object where keys are file paths (string) and values are the new file contents (string)."
+                const batches = [];
+                let currentBatch = [];
+                let currentCharCount = 0;
+                for (const file of part.files) {
+                    if (currentBatch.length > 0 && (currentCharCount + file.content.length > maxBatchChars)) {
+                        batches.push(currentBatch);
+                        currentBatch = [];
+                        currentCharCount = 0;
+                    }
+                    currentBatch.push(file);
+                    currentCharCount += file.content.length;
+                }
+                if (currentBatch.length > 0) batches.push(currentBatch);
+                
+                for (let i = 0; i < batches.length; i++) {
+                    const batchFiles = batches[i];
+                    const statusMsg = batches.length > 1
+                        ? \`Generating \${partName} (Batch \${i + 1}/\${batches.length})...\`
+                        : \`Generating \${partName} (\${part.files.length} files)...\`;
+                    self.postMessage({ type: 'progress', partName, statusMsg, isStarting: i === 0, fileCount: part.files.length });
+
+                    const reimplementationPrompt = \`
+                      Based on the provided analysis and source files, re-implement ONLY the following files...
+                      Analysis Context: ---\n\${analysisContent}\n---
+                      Files to re-implement: \${batchFiles.map(file => \`\n\n--- FILE: \${file.path} ---\n\\\`\\\`\\\`\n\${file.content}\n\\\`\\\`\\\`\`).join('')}
+                    \`;
+
+                    const result = await ai.models.generateContent({
+                        model: model,
+                        contents: [{role: 'user', parts: [{text: reimplementationPrompt}]}],
+                        config: {
+                            responseMimeType: 'application/json',
+                            responseSchema: {
+                                type: Type.OBJECT,
+                                properties: { files: { type: Type.OBJECT, description: "Keys are file paths, values are new file contents." } },
+                                required: ['files']
+                            },
+                            safetySettings,
                         }
-                    },
-                    required: ['files']
-                },
-                safetySettings,
+                    });
+                    
+                    const generated = JSON.parse(result.text);
+                    if (generated && generated.files) {
+                        Object.assign(allGeneratedFiles, generated.files);
+                    } else {
+                        throw new Error(\`AI returned invalid JSON structure for \${partName}.\`);
+                    }
+                }
+                self.postMessage({ type: 'progress-success', partName, fileCount: part.files.length });
             }
-        });
-        
-        const generated = JSON.parse(result.text);
-        if (generated && generated.files) {
-          Object.assign(allGeneratedFiles, generated.files);
-        } else {
-            throw new Error(`AI returned invalid JSON structure for ${partName}.`);
-        }
-      }
-      progressItem.textContent = `✅ ${partName} (${part.files.length} files) successfully generated.`;
-      progressItem.className = 'success';
-    }
 
-    // Create and download ZIP file
-    const zip = new JSZip();
-    for (const [filePath, content] of Object.entries(allGeneratedFiles)) {
-      zip.file(filePath, content);
+            const zip = new JSZip();
+            for (const [filePath, content] of Object.entries(allGeneratedFiles)) {
+                zip.file(filePath, content);
+            }
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            self.postMessage({ type: 'complete', blob: zipBlob });
+
+        } catch (error) {
+            self.postMessage({ type: 'error', message: error.message });
+        }
+    };
+  `;
+  const blob = new Blob([workerCode], {type: 'application/javascript'});
+  state.reimplementationWorker = new Worker(URL.createObjectURL(blob), {type: 'module'});
+  
+  const progressItems: Record<string, HTMLLIElement> = {};
+
+  state.reimplementationWorker.onmessage = (e) => {
+    const { type, partName, statusMsg, isStarting, fileCount, blob, message } = e.data;
+    switch (type) {
+      case 'progress':
+        if (isStarting) {
+          const li = document.createElement('li');
+          reimplementationProgress.appendChild(li);
+          progressItems[partName] = li;
+        }
+        progressItems[partName].textContent = `⏳ ${statusMsg}`;
+        progressItems[partName].className = 'in-progress';
+        break;
+      case 'progress-success':
+        progressItems[partName].textContent = `✅ ${partName} (${fileCount} files) successfully generated.`;
+        progressItems[partName].className = 'success';
+        break;
+      case 'complete':
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `reimplemented-${repoInfo.repo}.zip`;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+        setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
+        setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
+        state.reimplementationWorker?.terminate();
+        break;
+      case 'error':
+        showError(message, reimplementationOutput);
+        setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
+        setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
+        state.reimplementationWorker?.terminate();
+        break;
     }
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const downloadUrl = URL.createObjectURL(zipBlob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `reimplemented-${repoInfo.repo}.zip`;
-    a.click();
-    URL.revokeObjectURL(downloadUrl);
-  } catch (error) {
-    console.error('Error during re-implementation:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-    showError(errorMessage, reimplementationOutput);
-  } finally {
+  };
+
+  state.reimplementationWorker.onerror = (e) => {
+    console.error('Error in re-implementation worker:', e);
+    showError(`Worker error: ${e.message}`, reimplementationOutput);
     setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
     setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
-  }
+    state.reimplementationWorker?.terminate();
+  };
+
+  state.reimplementationWorker.postMessage({
+      analysisContent: state.lastAnalysisContent,
+      fileContents: state.lastFileContents,
+      apiKey: config.apiKey,
+      model: config.model,
+      maxBatchChars: config.maxBatchChars
+  });
 }
 
-// NOTE: This function is for demonstration and is not part of the core reimplementation flow.
-// It shows how a prompt *could* be generated for another tool.
 async function generateReimplementationPrompt() {
     if (!state.lastAnalysisContent || state.lastFileContents.length === 0) {
         showError('No analysis data available. Please analyze a repository first.', reimplementationPromptOutput);
         return;
     }
-
     setButtonState(generatePromptButton, 'Generating...', true);
     reimplementationPromptOutput.innerHTML = '';
     showStatus('Creating demonstration prompt...', reimplementationPromptOutput);
 
     try {
-        const prompt = `
-You are an expert AI developer. Re-implement the following project from scratch based on the provided analysis and original source code.
-Incorporate all suggestions from the analysis to improve the project.
-
-Analysis:
----
-${state.lastAnalysisContent}
----
-
-Original Source Code:
-${state.lastFileContents.map(file => `\n\n--- FILE: ${file.path} ---\n\`\`\`\n${file.content}\n\`\`\``).join('')}
-
-Your task:
-1.  Carefully review the analysis and code.
-2.  Provide a complete, file-by-file reimplementation of the entire project.
-3.  For each file, provide the full, corrected, and improved code. Do not use placeholders or omit code.
-4.  Your final response should be a single JSON object. This object must contain one key, "files".
-5.  The value for "files" must be another object, where each key is the full file path (e.g., "src/index.ts") and the value is the new file content as a string.
-        `;
-
-        reimplementationPromptOutput.innerHTML = `
-          <div class="prompt-display">
-            <textarea readonly>${escapeHtml(prompt)}</textarea>
-            <button class="copy-button">Copy</button>
-          </div>
-        `;
+        const prompt = `You are an expert AI developer...`;
+        reimplementationPromptOutput.innerHTML = `<div class="prompt-display">...</div>`;
         reimplementationPromptOutput.querySelector('.copy-button')?.addEventListener('click', (e) => {
             const button = e.target as HTMLButtonElement;
             navigator.clipboard.writeText(prompt).then(() => {
@@ -543,7 +555,6 @@ Your task:
         setButtonState(generatePromptButton, 'Generate Demo Prompt', false);
     }
 }
-
 
 // --- EVENT LISTENERS ---
 analyzeButton.addEventListener('click', analyzeRepository);
