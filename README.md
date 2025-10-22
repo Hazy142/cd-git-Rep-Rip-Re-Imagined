@@ -1,76 +1,68 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# AI GitHub Repository Analyzer & Re-implementer
 
-# AI-Powered GitHub Repository Analyzer & Re-implementer
-
-This project is an advanced, AI-powered tool for developers. It analyzes public GitHub repositories, provides a holistic code review, and can even re-implement the entire project from scratch based on its findings.
-
----
-
-## 🚨 Security Warning: Proof-of-Concept Only 🚨
-
-This application is a **proof-of-concept and is not secure for production use**.
-
-The current architecture requires the `API_KEY` to be available in the client-side JavaScript environment. This means **if you build it into the bundle, anyone who visits the deployed web page can easily find and use your API key at your expense.**
-
-For a production-ready version, all interactions with the Gemini API must be moved to a secure backend server that protects the API key.
-
----
-
-## How It Works
-
-1.  **Analyze**: A user provides a public GitHub repository URL.
-    - The application fetches the repository's file tree.
-    - It uses the Gemini AI to intelligently select the most relevant source files.
-    - It fetches the content of these files.
-    - It performs a second, larger call to Gemini to generate a high-level code review, identifying the project's purpose, architecture, potential flaws, and areas for improvement.
-
-2.  **Re-implement**: Based on the analysis, the application can re-implement the project.
-    - It intelligently batches the project's files into logical chunks (e.g., configuration, styling, core logic).
-    - It sends each chunk to Gemini, along with the analysis, instructing it to rewrite the code with the suggested improvements.
-    - Finally, it packages the new, improved code into a downloadable ZIP file.
+This is a client-side web application that uses Generative AI to analyze and re-implement GitHub repositories.
 
 ## Features
 
--   **Intelligent File Selection**: Uses AI to automatically identify the most important files in a repository, saving you from manual selection.
--   **Holistic Code Analysis**: Provides high-level insights into architecture, potential bugs, and security vulnerabilities.
--   **AI-Powered Refactoring**: Re-implements the entire codebase, applying best practices and the analysis's recommendations.
--   **Batch Processing**: Handles larger projects by breaking them into manageable chunks for the AI.
--   **ZIP Export**: Downloads the complete, re-implemented project as a single `.zip` file.
+*   **Fetches Repository Data:** Uses the GitHub API to fetch the repository's file tree and the content of key files.
+*   **AI-Powered File Selection:** Leverages a Generative AI model to intelligently select the most relevant source code files for analysis.
+*   **Holistic Code Analysis:** Generates a high-level code review, identifying the project's purpose, architecture, flaws, and potential improvements.
+*   **AI-Powered Re-implementation:** Re-writes the entire project from scratch, incorporating the suggested improvements.
+*   **Downloadable Output:** The result of the re-implementation is packaged into a ZIP archive and made available for download.
 
-## Technology Stack
+## Architecture
 
--   **Framework**: Vanilla TypeScript (No React, Vue, etc.)
--   **AI Model**: Google Gemini 2.5 Pro
--   **APIs**: GitHub API, Google AI JavaScript SDK
--   **Build Tool**: Vite
--   **Key Libraries**: `marked` (Markdown parsing), `JSZip` (ZIP creation), `DOMPurify` (HTML sanitization)
+The application is a single-page application (SPA) built with TypeScript, HTML, and CSS. It uses Vite for development and bundling. The core logic is now split between the client and a new Node.js/Express backend server.
 
-## Run Locally
+*   **Client:** The frontend is responsible for the UI, user interactions, and communication with the GitHub API.
+*   **Server:** The backend is a simple Express.js server that handles all communication with the Google AI API. This ensures that the API key is kept secure on the server.
 
-**Prerequisites:** [Node.js](https://nodejs.org/) installed.
+## Getting Started
+
+### Prerequisites
+
+*   Node.js and npm
+*   A Google AI API key
+
+### Installation
 
 1.  **Clone the repository:**
     ```bash
     git clone https://github.com/your-username/your-repo-name.git
     cd your-repo-name
     ```
-
-2.  **Install dependencies:**
+2.  **Install frontend dependencies:**
     ```bash
     npm install
     ```
-
-3.  **Set up your environment variables:**
-    Create a file named `.env` in the root of the project and add your Gemini API key:
+3.  **Install backend dependencies:**
+    ```bash
+    cd server
+    npm install
     ```
-    API_KEY="YOUR_API_KEY"
-    ```
+4.  **Configure the backend:**
+    *   Create a `.env` file in the `server` directory.
+    *   Add your Google AI API key to the `.env` file:
+        ```
+        API_KEY="YOUR_API_KEY"
+        ```
 
-4.  **Run the development server:**
+### Running the Application
+
+1.  **Start the backend server:**
+    ```bash
+    cd server
+    npm start
+    ```
+2.  **Start the frontend development server:**
     ```bash
     npm run dev
     ```
+3.  Open your browser and navigate to the URL provided by Vite (usually `http://localhost:5173`).
 
-The application will be available at `http://localhost:5173`.
+## How to Use
+
+1.  Enter a public GitHub repository URL.
+2.  Optionally, provide a GitHub Personal Access Token to avoid API rate limits.
+3.  Click "Analyze Repository".
+4.  Once the analysis is complete, you can re-implement the project by clicking "Re-implement & Download ZIP".
