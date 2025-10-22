@@ -19,13 +19,30 @@
 </script>
   </head>
   <body>
+    <div id="api-key-container" class="api-key-container collapsed">
+        <button id="api-key-toggle-button" aria-label="Toggle API Key Panel">
+            <span class="icon">⚙️</span>
+            <span class="badge" style="display: none;">⚠️</span>
+        </button>
+        <div class="api-key-panel">
+            <h3>Configure Gemini API Key</h3>
+            <p>For local testing, you can provide your own key. In AI Studio, this is managed automatically.</p>
+            <div class="input-group">
+                <label for="api-key-input">Your API Key:</label>
+                <input type="password" id="api-key-input" placeholder="Starts with 'AIza...'">
+            </div>
+            <div class="button-group">
+                <button id="api-key-save-button">Save Key</button>
+                <button id="api-key-clear-button" class="secondary">Clear Key</button>
+            </div>
+            <div id="api-key-status"></div>
+            <small>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Get a Gemini API Key</a>
+            </small>
+        </div>
+    </div>
     <main>
-      <div id="security-warning">
-        <p>
-          <strong>🚨 Proof-of-Concept Only:</strong> Do not use this application
-          in production. Your API key is exposed on the client-side.
-        </p>
-      </div>
+      <div id="error-message" class="status-message error hidden"></div>
       <header>
         <h1>AI GitHub Repository Analyzer</h1>
         <p>

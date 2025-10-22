@@ -1,26 +1,22 @@
 {
-  "name": "ai-repo-analyzer",
-  "private": true,
-  "version": "0.0.0",
+  "name": "cd-git-rep-rip-re-imagined",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev-client\" \"npm run dev-server\"",
-    "dev-client": "vite",
-    "dev-server": "cd server && npm start > server.log",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^0.14.0",
+    "@google/generative-ai": "^0.21.0",
     "dompurify": "^3.0.11",
     "jszip": "^3.10.1",
     "marked": "^13.0.2"
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.6",
-    "@types/marked": "^6.0.0",
-    "@types/node": "^20.14.9",
-    "concurrently": "^9.2.1",
+    "@types/node": "^24.9.1",
     "typescript": "^5.5.2",
     "vite": "^5.4.21"
   }
