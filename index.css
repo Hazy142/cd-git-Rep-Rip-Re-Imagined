@@ -1,3 +1,4 @@
+
 /* ==========================================================================
    1. Root Variables
    ========================================================================== */
@@ -243,6 +244,9 @@ button:disabled {
 #reimplementation-prompt-output,
 #reimplementation-output {
   margin-top: var(--spacing-lg);
+}
+
+.prompt-display {
   position: relative;
 }
 
