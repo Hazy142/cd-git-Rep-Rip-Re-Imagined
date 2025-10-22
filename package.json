@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently \"npm run dev-client\" \"npm run dev-server\"",
+    "dev-client": "vite",
+    "dev-server": "cd server && npm start > server.log",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -18,7 +20,8 @@
     "@types/dompurify": "^3.0.6",
     "@types/marked": "^6.0.0",
     "@types/node": "^20.14.9",
+    "concurrently": "^9.2.1",
     "typescript": "^5.5.2",
-    "vite": "^5.3.1"
+    "vite": "^5.4.21"
   }
 }
