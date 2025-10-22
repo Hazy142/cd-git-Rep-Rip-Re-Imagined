@@ -51,6 +51,7 @@ label {
 }
 
 input[type='url'],
+input[type='password'],
 textarea {
   width: 100%;
   padding: 0.75em;
@@ -61,12 +62,20 @@ textarea {
   font-family: sans-serif;
 }
 
+.input-description {
+  font-size: 0.8em;
+  color: #8a8d91;
+  margin: 0.25em 0 0 0;
+  text-align: left;
+}
+
 textarea {
   min-height: 120px;
   resize: vertical;
 }
 
 input[type='url']:focus,
+input[type='password']:focus,
 textarea:focus {
   outline: none;
   border-color: #1877f2;
