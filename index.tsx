@@ -41,6 +41,9 @@ const reimplementationPromptOutput = document.getElementById(
 const reimplementationOutput = document.getElementById(
   'reimplementation-output'
 ) as HTMLDivElement;
+const reimplementationProgress = document.getElementById(
+  'reimplementation-progress'
+) as HTMLUListElement;
 
 // Module-level variables to store the last analysis results
 let lastAnalysisContent: string | null = null;
@@ -53,6 +56,19 @@ function escapeHtml(unsafe: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function setButtonState(
+  button: HTMLButtonElement,
+  text: string,
+  isLoading: boolean
+) {
+  button.disabled = isLoading;
+  let content = `<span>${escapeHtml(text)}</span>`;
+  if (isLoading) {
+    content = `<div class="spinner"></div>` + content;
+  }
+  button.innerHTML = content;
 }
 
 function showStatus(message: string, container: HTMLElement) {
@@ -71,6 +87,14 @@ function showError(message: string, container: HTMLElement) {
   if (container === outputContainer) {
     promptGenerationArea.style.display = 'none';
   }
+}
+
+function showReimplementationError(message: string) {
+  const errorElement = document.createElement('p');
+  errorElement.style.color = 'red';
+  errorElement.style.fontWeight = 'bold';
+  errorElement.innerHTML = `<strong>Error:</strong> ${escapeHtml(message)}`;
+  reimplementationOutput.appendChild(errorElement);
 }
 
 async function fetchRepoTree(repoPath: string): Promise<string[]> {
@@ -131,11 +155,11 @@ async function analyzeRepository() {
     return;
   }
 
-  analyzeButton.disabled = true;
-  analyzeButton.textContent = 'Analyzing...';
+  setButtonState(analyzeButton, 'Analyzing...', true);
   promptGenerationArea.style.display = 'none';
   reimplementationPromptOutput.innerHTML = '';
-  reimplementationOutput.innerHTML = '';
+  reimplementationOutput.innerHTML = ''; // Clears error messages and progress list
+  reimplementationProgress.innerHTML = '';
 
   try {
     // Step 1: Fetch repository structure
@@ -263,8 +287,7 @@ async function analyzeRepository() {
       error instanceof Error ? error.message : 'An unknown error occurred.';
     showError(errorMessage, outputContainer);
   } finally {
-    analyzeButton.disabled = false;
-    analyzeButton.textContent = 'Analyze Repository';
+    setButtonState(analyzeButton, 'Analyze Repository', false);
   }
 }
 
@@ -276,10 +299,10 @@ async function generateReimplementationPrompt() {
     );
     return;
   }
-
-  generatePromptButton.disabled = true;
-  generatePromptButton.textContent = 'Generating...';
+  
+  setButtonState(generatePromptButton, 'Generating...', true);
   reimplementationOutput.innerHTML = '';
+  reimplementationProgress.innerHTML = '';
   showStatus('Creating detailed prompt...', reimplementationPromptOutput);
 
   try {
@@ -341,11 +364,9 @@ async function generateReimplementationPrompt() {
       error instanceof Error ? error.message : 'An unknown error occurred.';
     showError(errorMessage, reimplementationPromptOutput);
   } finally {
-    generatePromptButton.disabled = false;
-    generatePromptButton.textContent = 'Generate Re-implementation Prompt';
+    setButtonState(generatePromptButton, 'Generate Re-implementation Prompt', false);
   }
 }
-
 async function reimplementAndZip() {
   if (!lastAnalysisContent || lastFileContents.length === 0) {
     showError(
@@ -355,87 +376,128 @@ async function reimplementAndZip() {
     return;
   }
 
-  reimplementZipButton.disabled = true;
-  reimplementZipButton.textContent = 'Re-implementing...';
+  setButtonState(reimplementZipButton, 'Re-implementing...', true);
   reimplementationPromptOutput.innerHTML = '';
-  showStatus('AI is re-implementing the project...', reimplementationOutput);
+  reimplementationProgress.innerHTML = ''; // Clear previous progress
+  reimplementationOutput.innerHTML = ''; // Clear previous errors
+  reimplementationOutput.appendChild(reimplementationProgress);
+
+
+  const allNewFiles: { path: string; content: string }[] = [];
+
+  const projectParts = [
+    { name: 'Configuration', keywords: ['package.json', 'tsconfig.json', 'vite.config', '.rc', 'config.js'] },
+    { name: 'Styling', keywords: ['.css', '.scss', 'tailwind', 'styles'] },
+    { name: 'Type Definitions', keywords: ['types', '.d.ts', 'interface', 'schema'] },
+    { name: 'Core Logic/Services', keywords: ['service', 'api', 'lib', 'core', 'util', 'hook', 'store', 'context'] },
+    { name: 'UI Components', keywords: ['component', '.tsx', '.jsx', 'view', 'page'] },
+    { name: 'Entrypoint/Main', keywords: ['main.', 'index.', 'app.'] },
+  ];
+
+  const filesByPart: Record<string, { path: string; content: string }[]> = {};
+  const categorizedFiles = new Set<string>();
+
+  for (const part of projectParts) {
+    filesByPart[part.name] = [];
+    for (const file of lastFileContents) {
+      if (categorizedFiles.has(file.path)) continue;
+      if (part.keywords.some(keyword => file.path.toLowerCase().includes(keyword))) {
+        filesByPart[part.name].push(file);
+        categorizedFiles.add(file.path);
+      }
+    }
+  }
+  filesByPart['Miscellaneous'] = lastFileContents.filter(file => !categorizedFiles.has(file.path));
+  const orderedPartsToProcess = [...projectParts.map(p => p.name), 'Miscellaneous'];
 
   try {
-    const prompt = `
-      You are an expert software developer tasked with re-implementing a project from scratch based on a code review and the original source files.
-      Your task is to rewrite the entire project, incorporating all the suggestions, bug fixes, and improvements from the analysis.
-      You MUST return the complete, re-implemented project.
+    for (const partName of orderedPartsToProcess) {
+      const files = filesByPart[partName];
+      if (files.length === 0) continue;
+      
+      const fileCount = files.length;
+      const progressItem = document.createElement('li');
+      progressItem.className = 'in-progress';
+      progressItem.textContent = `⏳ Generating ${partName} (${fileCount} files)...`;
+      reimplementationProgress.appendChild(progressItem);
 
-      Here is the high-level analysis and recommendations:
-      --- ANALYSIS START ---
-      ${lastAnalysisContent}
-      --- ANALYSIS END ---
+      const prompt = `
+        You are an expert software developer tasked with re-implementing ONE specific part of a larger project.
+        Your task is to rewrite ONLY the files provided below, incorporating suggestions from the overall project analysis.
 
-      Here is the source code of the original files:
-      ${lastFileContents
-        .map(
-          (file) =>
-            `\n\n--- START OF FILE: ${file.path} ---\n\`\`\`\n${file.content}\n\`\`\`\n--- END OF FILE: ${file.path} ---`
-        )
-        .join('')}
+        Overall Project Analysis:
+        --- ANALYSIS START ---
+        ${lastAnalysisContent}
+        --- ANALYSIS END ---
 
-      Your response MUST be a single JSON object. This object must contain one key: "files".
-      The value of "files" must be an array of objects. Each object in the array must have two keys:
-      1. "path": A string with the full file path.
-      2. "content": A string with the full, complete, and improved code for that file.
+        You are now working on the "${partName}" part of the project. Here is the source code for this part ONLY:
+        ${files
+          .map(
+            (file) =>
+              `\n\n--- START OF FILE: ${file.path} ---\n\`\`\`\n${file.content}\n\`\`\`\n--- END OF FILE: ${file.path} ---`
+          )
+          .join('')}
 
-      Do not include any files that were not in the original file list. Ensure all provided files are re-implemented.
-    `;
+        Your response MUST be a single JSON object with one key: "files".
+        The value of "files" must be an array of objects, where each object has "path" and "content" keys for the re-implemented files.
+        ONLY return the files for this part. Do not return files that were not in the input.
+      `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            files: {
-              type: Type.ARRAY,
-              items: {
+      let partGenerated = false;
+      for (let attempt = 1; attempt <= 2 && !partGenerated; attempt++) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  path: { type: Type.STRING },
-                  content: { type: Type.STRING },
+                  files: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        path: { type: Type.STRING },
+                        content: { type: Type.STRING },
+                      },
+                      required: ['path', 'content'],
+                    },
+                  },
                 },
-                required: ['path', 'content'],
+                required: ['files'],
               },
             },
-          },
-          required: ['files'],
-        },
-      },
-    });
+          });
+          
+          const newPart = JSON.parse(response.text);
+          allNewFiles.push(...newPart.files);
+          progressItem.className = 'success';
+          progressItem.textContent = `✅ ${partName} (${fileCount} files) successfully generated.`;
+          partGenerated = true;
 
-    let newProject: { files: { path: string; content: string }[] };
-
-    try {
-      // Clean the response before parsing. The model should return raw JSON,
-      // but sometimes it might wrap it in markdown.
-      let jsonText = response.text.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.substring(7, jsonText.length - 3).trim();
+        } catch (partError) {
+          if (attempt < 2) {
+            progressItem.className = 'warning';
+            progressItem.textContent = `⚠️ Error generating ${partName}. Retrying...`;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          } else {
+            progressItem.className = 'error';
+            progressItem.textContent = `❌ Final error generating ${partName}. Halting process.`;
+            throw partError;
+          }
+        }
       }
-      newProject = JSON.parse(jsonText);
-    } catch (parseError) {
-      console.error('Failed to parse JSON response from AI:', response.text);
-      throw new Error(
-        'The AI returned a malformed or incomplete JSON response. This can happen if the generated project is too large and the output is truncated. Please try again with a smaller repository.'
-      );
     }
+    
+    const finalProgress = document.createElement('li');
+    finalProgress.className = 'in-progress';
+    finalProgress.textContent = '📦 Generating ZIP file...';
+    reimplementationProgress.appendChild(finalProgress);
 
-    if (!newProject.files || newProject.files.length === 0) {
-      throw new Error('AI did not return any files for the new project.');
-    }
-
-    showStatus('Generating ZIP file...', reimplementationOutput);
     const zip = new JSZip();
-    for (const file of newProject.files) {
+    for (const file of allNewFiles) {
       zip.file(file.path, file.content);
     }
 
@@ -448,15 +510,16 @@ async function reimplementAndZip() {
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
 
-    reimplementationOutput.innerHTML = `<p style="color: green; text-align: center;"><strong>Success!</strong> Your download has started.</p>`;
+    finalProgress.className = 'success';
+    finalProgress.textContent = '🎉 Success! Your download has started.';
+
   } catch (error) {
     console.error('Error re-implementing project:', error);
     const errorMessage =
       error instanceof Error ? error.message : 'An unknown error occurred.';
-    showError(errorMessage, reimplementationOutput);
+    showReimplementationError(errorMessage);
   } finally {
-    reimplementZipButton.disabled = false;
-    reimplementZipButton.textContent = 'Re-implement & Download ZIP';
+    setButtonState(reimplementZipButton, 'Re-implement & Download ZIP', false);
   }
 }
 
